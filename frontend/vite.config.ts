@@ -19,6 +19,14 @@ export default defineConfig({
   },
   server: {
     host: "::",
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3004',
+        changeOrigin: true,
+        secure: false,
+      }
+    }
   },
   plugins: [
     react(),
@@ -29,4 +37,3 @@ export default defineConfig({
     },
   },
 });
-

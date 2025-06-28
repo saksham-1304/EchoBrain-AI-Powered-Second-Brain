@@ -28,32 +28,25 @@ A full-stack MERN application that serves as your AI-powered second brain for st
 - **React Router** for navigation
 - **TanStack Query** for data fetching
 
-## Setup Instructions
+## Quick Start
 
 ### Prerequisites
 - Node.js (v16 or higher)
 - npm (v7 or higher)
 - MongoDB database (local or cloud)
-- Git
 
 ### 1. Clone the Repository
-\`\`\`bash
+```bash
 git clone <repository-url>
 cd EchoBrain-AI-Powered-Second-Brain
-\`\`\`
+```
 
-### 2. Install Dependencies
-\`\`\`bash
-# Install dependencies for both frontend and backend
-npm run install:all
-\`\`\`
-
-### 3. Environment Configuration
+### 2. Environment Configuration
 
 #### Backend Environment
-Create a \`.env\` file in the \`backend\` directory:
+Create a `.env` file in the `backend` directory:
 
-\`\`\`env
+```env
 # Database Configuration
 MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/database_name
 
@@ -75,126 +68,105 @@ TWEET_BEARER=your_twitter_bearer_token_here
 
 # Server Configuration
 PORT=3004
-NODE_ENV=development
+NODE_ENV=production
 
 # Frontend URL (for CORS)
-FRONTEND_URL=http://localhost:5173
-\`\`\`
+FRONTEND_URL=http://localhost:3004
+```
 
-#### Frontend Environment
-Create a \`.env\` file in the \`frontend\` directory:
+### 3. Build and Run
 
-\`\`\`env
-VITE_API_URL=http://localhost:3004/api/v1
-\`\`\`
-
-### 4. Database Setup
-1. Create a MongoDB database (local or MongoDB Atlas)
-2. Update the \`MONGO_URI\` in your backend \`.env\` file
-3. The application will automatically create the necessary collections
-
-### 5. Running the Application
-
-#### Development Mode
-\`\`\`bash
-# Run both frontend and backend concurrently
-npm run dev
-
-# Or run them separately:
-# Backend only
-npm run dev:backend
-
-# Frontend only
-npm run dev:frontend
-\`\`\`
-
-#### Production Mode
-\`\`\`bash
-# Build the application
+```bash
+# Build the entire application (installs dependencies and builds frontend)
 npm run build
 
-# Start the production server
+# Start the production server (builds backend and serves the app)
 npm start
-\`\`\`
+```
 
-### 6. Access the Application
-- **Frontend**: http://localhost:5173
-- **Backend API**: http://localhost:3004/api/v1
+### 4. Access the Application
+- **Application**: http://localhost:3004
+- **API**: http://localhost:3004/api/v1
 - **Health Check**: http://localhost:3004/health
+
+## Development
+
+For development, you can run the frontend and backend separately:
+
+### Backend Development
+```bash
+cd backend
+npm install
+npm run dev
+```
+
+### Frontend Development
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
 ## API Endpoints
 
 ### Authentication
-- \`POST /api/v1/auth/signup\` - User registration
-- \`POST /api/v1/auth/signin\` - User login
-- \`GET /api/v1/auth/profile\` - Get user profile (protected)
-- \`POST /api/v1/auth/refresh\` - Refresh JWT token
+- `POST /api/v1/auth/signup` - User registration
+- `POST /api/v1/auth/signin` - User login
+- `GET /api/v1/auth/profile` - Get user profile (protected)
+- `POST /api/v1/auth/refresh` - Refresh JWT token
 
 ### Content Management
-- \`POST /api/v1/content\` - Create new content (protected)
-- \`GET /api/v1/content/home\` - Get user's content (protected)
-- \`GET /api/v1/content/stats\` - Get content statistics (protected)
-- \`DELETE /api/v1/content\` - Delete content (protected)
-- \`POST /api/v1/content/search\` - Semantic search (protected)
+- `POST /api/v1/content` - Create new content (protected)
+- `GET /api/v1/content/home` - Get user's content (protected)
+- `GET /api/v1/content/stats` - Get content statistics (protected)
+- `DELETE /api/v1/content` - Delete content (protected)
+- `POST /api/v1/content/search` - Semantic search (protected)
 
-## Usage
+## Production Deployment
 
-1. **Sign Up**: Create a new account with email and password
-2. **Sign In**: Log in to access your personalized dashboard
-3. **Add Content**: Upload links, documents, or create notes
-4. **Search**: Use the AI-powered search to find relevant content
-5. **Organize**: Tag and categorize your content for better organization
+The application is designed to run as a single server that serves both the API and the frontend:
 
-## Testing the Backend
+1. **Build**: `npm run build` - Installs dependencies and builds the frontend
+2. **Start**: `npm start` - Builds the backend, copies frontend assets, and starts the server
 
-You can test the backend API connection using the included test script:
+The backend automatically serves the React frontend from the `/dist` folder and handles API routes under `/api/v1`.
 
-\`\`\`bash
-cd backend
-node test-api.js
-\`\`\`
+## Environment Variables
+
+### Required
+- `MONGO_URI` - MongoDB connection string
+- `SECRET_KEY` - JWT secret key
+
+### Optional
+- `GEMINI_KEY` - Google Gemini AI API key
+- `QDRANT_URL` - Qdrant vector database URL
+- `QDRANT_KEY` - Qdrant API key
+- `YT_API` - YouTube Data API key
+- `TWEET_BEARER` - Twitter API bearer token
+- `PORT` - Server port (default: 3004)
+- `NODE_ENV` - Environment (development/production)
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Connection Refused Error**
-   - Ensure the backend is running on port 3004
-   - Check if MongoDB is connected properly
-   - Verify environment variables are set correctly
+1. **Build Errors**
+   - Ensure Node.js version is 16 or higher
+   - Clear node_modules and run `npm run build` again
+   - Check that all required environment variables are set
 
-2. **CORS Errors**
-   - Make sure \`FRONTEND_URL\` in backend \`.env\` matches your frontend URL
-   - Check that CORS is properly configured in \`backend/src/app.ts\`
+2. **Database Connection**
+   - Verify MongoDB URI is correct
+   - Ensure database is accessible from your network
+   - Check MongoDB Atlas IP whitelist if using cloud database
 
-3. **Authentication Issues**
-   - Ensure \`SECRET_KEY\` is set in backend environment
-   - Check that JWT tokens are being stored correctly in localStorage
-   - Verify API endpoints are accessible
-
-4. **Build Errors**
-   - Clear node_modules and reinstall dependencies
-   - Ensure all required environment variables are set
-   - Check for TypeScript compilation errors
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch: \`git checkout -b feature-name\`
-3. Commit your changes: \`git commit -am 'Add some feature'\`
-4. Push to the branch: \`git push origin feature-name\`
-5. Submit a pull request
+3. **Port Conflicts**
+   - Change the PORT environment variable if 3004 is in use
+   - Ensure no other services are running on the same port
 
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Support
-
-If you encounter any issues or have questions, please:
-1. Check the troubleshooting section above
-2. Review the console logs for error messages
-3. Open an issue on the repository with detailed information about the problem
 
 ---
 

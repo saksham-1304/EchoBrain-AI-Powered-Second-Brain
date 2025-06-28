@@ -8,7 +8,7 @@
     "build:frontend": "cd ../frontend && npm run build",
     "copy:frontend": "rimraf dist && copyfiles -u 1 \"../frontend/dist/**/*\" dist",
     "build:full": "npm run build:frontend && npm run copy:frontend && npm run build",
-    "start": "node build/index.js",
+    "start": "npm run build:full && node build/index.js",
     "dev": "npm run build && npm run start",
     "watch": "tsc -w",
     "start:dev": "nodemon build/index.js",

@@ -149,9 +149,7 @@ app.listen(PORT, () => {
     console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`🔗 API URL: http://localhost:${PORT}/api/v1`);
     console.log(`❤️  Health Check: http://localhost:${PORT}/health`);
-    if (process.env.NODE_ENV === 'development') {
-        console.log(`🌐 Frontend: http://localhost:5173`);
-    }
+    console.log(`🌐 Frontend: http://localhost:${PORT}`);
 });
 
 export default app;

@@ -4,18 +4,8 @@
   "description": "EchoBrain - AI Powered Second Brain with MERN Stack",
   "private": true,
   "scripts": {
-    "build": "npm install --prefix backend && npm install --prefix frontend && npm run build:full --prefix backend",
-    "start": "npm run start --prefix backend",
-    "dev:backend": "npm run dev --prefix backend",
-    "dev:frontend": "npm run dev --prefix frontend",
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "install:all": "npm install --prefix backend && npm install --prefix frontend",
-    "test:backend": "cd backend && node test-api.js",
-    "clean": "npm run clean --prefix backend && npm run clean --prefix frontend",
-    "lint": "npm run lint --prefix frontend"
-  },
-  "devDependencies": {
-    "concurrently": "^8.2.2"
+    "build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
+    "start": "npm run start --prefix backend"
   },
   "engines": {
     "node": ">=16.0.0",
