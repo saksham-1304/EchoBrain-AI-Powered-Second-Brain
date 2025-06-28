@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Header } from '@/components/Header';
@@ -29,6 +29,7 @@ const Index = () => {
   const { user } = useAuth();
   const { showContentAdded, showBrainShared } = useNotifications();
   const navigate = useNavigate();
+  const hasInitialLoadRef = useRef(false);
 
   const {
     content,
@@ -40,13 +41,20 @@ const Index = () => {
   } = useContentManagement();
 
   useEffect(() => {
+    console.log('[Index] useEffect triggered - user:', !!user, 'hasInitialLoad:', hasInitialLoadRef.current);
+    
     if (!user) {
       navigate('/');
       return;
     }
-    // Load user content when component mounts
-    loadUserContent();
-  }, [user, navigate, loadUserContent]);
+    
+    // Only load content once when user is available and hasn't been loaded yet
+    if (user && !hasInitialLoadRef.current) {
+      hasInitialLoadRef.current = true;
+      console.log('[Index] Loading initial content');
+      loadUserContent();
+    }
+  }, [user, navigate]); // Remove loadUserContent from dependencies to prevent infinite loop
 
   const handleNewContent = async (newItem: ContentItem) => {
     try {

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { ContentItem } from '@/types/content';
 import { useNotifications } from '@/hooks/useNotifications';
 import { api } from '@/utils/api';
@@ -17,6 +17,7 @@ export const useContentManagement = () => {
     hasPrev: false
   });
   const { showSuccess, showError } = useNotifications();
+  const loadingRef = useRef(false);
 
   // Clear error when starting new operations
   const clearError = useCallback(() => {
@@ -24,9 +25,18 @@ export const useContentManagement = () => {
   }, []);
 
   const loadUserContent = useCallback(async (page: number = 1, limit: number = 20, append: boolean = false) => {
+    // Prevent multiple concurrent requests
+    if (loadingRef.current) {
+      console.log('[ContentManagement] Already loading, skipping request');
+      return;
+    }
+
+    console.log(`[ContentManagement] Loading user content - page: ${page}, limit: ${limit}, append: ${append}`);
+
     if (!append) {
       setIsLoading(true);
     }
+    loadingRef.current = true;
     clearError();
     
     try {
@@ -59,13 +69,17 @@ export const useContentManagement = () => {
         if (response.data.pagination) {
           setPagination(response.data.pagination);
         }
+
+        console.log(`[ContentManagement] Successfully loaded ${transformedContent.length} items`);
       }
     } catch (error: any) {
       const errorMessage = error.message || 'Failed to load content';
+      console.error('[ContentManagement] Error loading content:', error);
       setError(errorMessage);
       showError('Failed to load content', errorMessage);
     } finally {
       setIsLoading(false);
+      loadingRef.current = false;
     }
   }, [showError, clearError]);
 
@@ -207,15 +221,17 @@ export const useContentManagement = () => {
 
   // Load more content for pagination
   const loadMore = useCallback(async () => {
-    if (pagination.hasNext && !isLoading) {
+    if (pagination.hasNext && !isLoading && !loadingRef.current) {
       await loadUserContent(pagination.page + 1, pagination.limit, true);
     }
-  }, [pagination, isLoading, loadUserContent]);
+  }, [pagination.hasNext, pagination.page, pagination.limit, isLoading]);
 
   // Refresh content
   const refresh = useCallback(async () => {
-    await loadUserContent(1, pagination.limit, false);
-  }, [loadUserContent, pagination.limit]);
+    if (!loadingRef.current) {
+      await loadUserContent(1, pagination.limit, false);
+    }
+  }, [pagination.limit]);
 
   return {
     content,

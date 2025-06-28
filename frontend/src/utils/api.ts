@@ -74,6 +74,13 @@ const removeTokens = (): void => {
 // Request queue for handling concurrent requests
 const requestQueue = new Map<string, Promise<any>>();
 
+// Request cache with timestamps to prevent excessive requests
+const requestCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_DURATION = 5000; // 5 seconds cache for content requests
+
+// Global request counter for debugging
+let requestCounter = 0;
+
 // Retry configuration
 const RETRY_CONFIG = {
   maxRetries: 3,
@@ -161,8 +168,13 @@ class ApiClient {
     // Create request key for deduplication
     const requestKey = `${options.method || 'GET'}_${endpoint}_${JSON.stringify(options.body || {})}`;
     
+    // Debug logging
+    requestCounter++;
+    console.log(`[API Request #${requestCounter}] ${options.method || 'GET'} ${endpoint}`);
+    
     // Check if same request is already in progress
     if (requestQueue.has(requestKey)) {
+      console.log(`[API Request #${requestCounter}] Duplicate request detected, returning existing promise`);
       return requestQueue.get(requestKey);
     }
 
@@ -171,6 +183,7 @@ class ApiClient {
 
     try {
       const result = await requestPromise;
+      console.log(`[API Request #${requestCounter}] Completed successfully`);
       return result;
     } finally {
       requestQueue.delete(requestKey);
@@ -335,8 +348,24 @@ class ApiClient {
 
   async getUserContent(page: number = 1, limit: number = 20): Promise<ApiResponse> {
     try {
-      return await this.request<ApiResponse>(`/content/home?page=${page}&limit=${limit}`);
+      console.log(`[API] Loading user content - page: ${page}, limit: ${limit}`);
+      
+      // Check cache for recent identical requests
+      const cacheKey = `getUserContent_${page}_${limit}`;
+      const cached = requestCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+        console.log(`[API] Returning cached result for getUserContent`);
+        return cached.data;
+      }
+      
+      const result = await this.request<ApiResponse>(`/content/home?page=${page}&limit=${limit}`);
+      
+      // Cache the result
+      requestCache.set(cacheKey, { data: result, timestamp: Date.now() });
+      
+      return result;
     } catch (error: any) {
+      console.error(`[API] Failed to fetch content:`, error);
       throw new Error(error.message || 'Failed to fetch content.');
     }
   }
