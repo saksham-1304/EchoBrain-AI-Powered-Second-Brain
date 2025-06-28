@@ -89,6 +89,19 @@ npm start
 - **API**: http://localhost:3004/api/v1
 - **Health Check**: http://localhost:3004/health
 
+## How It Works
+
+### Build Process (`npm run build`)
+1. Installs backend dependencies (`npm install --prefix backend`)
+2. Installs frontend dependencies (`npm install --prefix frontend`)
+3. Builds the frontend React app (`npm run build --prefix frontend`)
+
+### Start Process (`npm start`)
+1. Builds the backend TypeScript code (`npm run build`)
+2. Starts the Express server (`node build/index.js`)
+3. Server directly serves frontend files from `../frontend/dist`
+4. Handles both API routes (`/api/v1/*`) and frontend routing
+
 ## Development
 
 For development, you can run the frontend and backend separately:
@@ -122,14 +135,29 @@ npm run dev
 - `DELETE /api/v1/content` - Delete content (protected)
 - `POST /api/v1/content/search` - Semantic search (protected)
 
-## Production Deployment
+## Architecture
 
-The application is designed to run as a single server that serves both the API and the frontend:
+The application uses a **single server architecture**:
 
-1. **Build**: `npm run build` - Installs dependencies and builds the frontend
-2. **Start**: `npm start` - Builds the backend, copies frontend assets, and starts the server
+- **Backend**: Express.js server that handles API routes and serves static files
+- **Frontend**: React SPA built with Vite, served as static files
+- **Database**: MongoDB for data persistence
+- **Static Files**: Frontend build files served directly from `frontend/dist`
 
-The backend automatically serves the React frontend from the `/dist` folder and handles API routes under `/api/v1`.
+## File Structure
+
+```
+project/
+├── backend/
+│   ├── src/           # Backend TypeScript source
+│   ├── build/         # Compiled backend JavaScript
+│   └── package.json   # Backend dependencies
+├── frontend/
+│   ├── src/           # Frontend React source
+│   ├── dist/          # Frontend build output (served by backend)
+│   └── package.json   # Frontend dependencies
+└── package.json       # Root build scripts
+```
 
 ## Environment Variables
 
@@ -155,12 +183,17 @@ The backend automatically serves the React frontend from the `/dist` folder and 
    - Clear node_modules and run `npm run build` again
    - Check that all required environment variables are set
 
-2. **Database Connection**
+2. **Frontend Not Loading**
+   - Verify frontend was built successfully (`frontend/dist` exists)
+   - Check backend console for static file serving errors
+   - Ensure backend is serving from correct path
+
+3. **Database Connection**
    - Verify MongoDB URI is correct
    - Ensure database is accessible from your network
    - Check MongoDB Atlas IP whitelist if using cloud database
 
-3. **Port Conflicts**
+4. **Port Conflicts**
    - Change the PORT environment variable if 3004 is in use
    - Ensure no other services are running on the same port
 

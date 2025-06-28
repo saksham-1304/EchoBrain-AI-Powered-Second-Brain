@@ -73,8 +73,8 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use("/api/v1", router);
 
-// Serve static files from frontend dist folder
-const frontendDistPath = path.join(__dirname, '../dist');
+// Serve static files from frontend dist folder (directly from frontend/dist)
+const frontendDistPath = path.join(__dirname, '../../frontend/dist');
 app.use(express.static(frontendDistPath));
 
 // Serve React app for all non-API routes (SPA fallback)
@@ -150,6 +150,7 @@ app.listen(PORT, () => {
     console.log(`🔗 API URL: http://localhost:${PORT}/api/v1`);
     console.log(`❤️  Health Check: http://localhost:${PORT}/health`);
     console.log(`🌐 Frontend: http://localhost:${PORT}`);
+    console.log(`📁 Serving frontend from: ${frontendDistPath}`);
 });
 
 export default app;

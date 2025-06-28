@@ -5,16 +5,12 @@
   "main": "build/index.js",
   "scripts": {
     "build": "tsc",
-    "build:frontend": "cd ../frontend && npm run build",
-    "copy:frontend": "rimraf dist && copyfiles -u 1 \"../frontend/dist/**/*\" dist",
-    "build:full": "npm run build:frontend && npm run copy:frontend && npm run build",
-    "start": "npm run build:full && node build/index.js",
+    "start": "npm run build && node build/index.js",
     "dev": "npm run build && npm run start",
     "watch": "tsc -w",
     "start:dev": "nodemon build/index.js",
     "start:prod": "NODE_ENV=production npm run start",
-    "clean": "rimraf build dist",
-    "rebuild": "npm run clean && npm run build:full",
+    "clean": "rimraf build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -56,7 +52,6 @@
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
-    "copyfiles": "^2.4.1",
     "nodemon": "^3.1.10",
     "rimraf": "^3.0.2"
   },
