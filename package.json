@@ -4,7 +4,10 @@
   "description": "EchoBrain - AI Powered Second Brain with MERN Stack",
   "private": true,
   "scripts": {
-    "build": "npm install --prefix backend && npm install --prefix frontend && npm run build:full --prefix backend",
+    "build": "npm run install:all && npm run build:full --prefix backend",
+    "build:backend": "npm run build --prefix backend",
+    "build:frontend": "npm run build --prefix frontend",
+    "build:full": "npm run build:frontend && npm run build:backend",
     "start": "npm run start --prefix backend",
     "dev:backend": "npm run dev --prefix backend",
     "dev:frontend": "npm run dev --prefix frontend",
@@ -12,6 +15,8 @@
     "install:all": "npm install --prefix backend && npm install --prefix frontend",
     "test:backend": "cd backend && node test-api.js",
     "clean": "npm run clean --prefix backend && npm run clean --prefix frontend",
+    "clean:all": "npm run clean:all --prefix backend && rm -rf frontend/dist",
+    "verify:structure": "echo \"Verifying project structure...\" && ls -la backend/ && echo \"Backend dist contents:\" && ls -la backend/dist/ 2>/dev/null || echo \"No dist folder found\" && echo \"Verification complete.\"",
     "lint": "npm run lint --prefix frontend"
   },
   "devDependencies": {
