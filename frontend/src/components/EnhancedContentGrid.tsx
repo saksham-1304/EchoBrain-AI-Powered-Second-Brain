@@ -1,34 +1,74 @@
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence, LayoutGroup, Variants } from 'framer-motion';
 import { ContentItem } from '@/types/content';
 import { EnhancedContentCard } from '@/components/EnhancedContentCard';
 import { ContentActionButtons } from '@/components/ContentActionButtons';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Filter, SortAsc, Grid, List, Sparkles } from 'lucide-react';
+import { Filter, SortAsc, Grid, List, Sparkles, Loader2 } from 'lucide-react';
 
 interface EnhancedContentGridProps {
   content: ContentItem[];
   onContentClick?: (content: ContentItem) => void;
   onEditContent?: (content: ContentItem) => void;
   onDeleteContent?: (id: string) => void;
+  isLoading?: boolean;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
 }
 
 type SortOption = 'date' | 'title' | 'type' | 'tags';
 type ViewMode = 'grid' | 'list' | 'masonry';
 
+// Memoized content card component to prevent unnecessary re-renders
+const MemoizedContentCard = React.memo(({ 
+  item, 
+  onContentClick, 
+  onEditContent, 
+  onDeleteContent 
+}: {
+  item: ContentItem;
+  onContentClick?: (content: ContentItem) => void;
+  onEditContent?: (content: ContentItem) => void;
+  onDeleteContent?: (id: string) => void;
+}) => (
+  <div className="relative group">
+    <EnhancedContentCard 
+      content={item} 
+      onContentClick={onContentClick}
+    />
+    
+    {/* Action Buttons Overlay */}
+    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+      <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-md rounded-lg p-1 shadow-lg border border-white/30">
+        <ContentActionButtons
+          content={item}
+          onEdit={onEditContent || (() => {})}
+          onDelete={onDeleteContent || (() => {})}
+          onView={onContentClick || (() => {})}
+          compact
+        />
+      </div>
+    </div>
+  </div>
+));
+
+MemoizedContentCard.displayName = 'MemoizedContentCard';
+
 export const EnhancedContentGrid: React.FC<EnhancedContentGridProps> = ({ 
   content, 
   onContentClick,
   onEditContent,
-  onDeleteContent
+  onDeleteContent,
+  isLoading = false,
+  hasMore = false,
+  onLoadMore
 }) => {
   const [sortBy, setSortBy] = useState<SortOption>('date');
   const [filterType, setFilterType] = useState<string>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
-  // Sort and filter content (removed search functionality since it's handled by SmartSearchBar)
+  // Memoized content processing to prevent unnecessary recalculations
   const processedContent = useMemo(() => {
     let filtered = content;
 
@@ -55,17 +95,36 @@ export const EnhancedContentGrid: React.FC<EnhancedContentGridProps> = ({
     return sorted;
   }, [content, filterType, sortBy]);
 
+  // Memoized content types to prevent recalculation
   const contentTypes = useMemo(() => {
     const types = [...new Set(content.map(item => item.type))];
     return types;
   }, [content]);
+
+  // Optimized handlers with useCallback
+  const handleSortChange = useCallback((newSort: SortOption) => {
+    setSortBy(newSort);
+  }, []);
+
+  const handleFilterChange = useCallback((newFilter: string) => {
+    setFilterType(newFilter);
+  }, []);
+
+  const handleViewModeChange = useCallback((newMode: ViewMode) => {
+    setViewMode(newMode);
+  }, []);
+
+  const handleClearFilters = useCallback(() => {
+    setFilterType('all');
+    setSortBy('date');
+  }, []);
 
   const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
       transition: {
-        staggerChildren: 0.1
+        staggerChildren: 0.05 // Reduced stagger for better performance
       }
     }
   };
@@ -93,7 +152,7 @@ export const EnhancedContentGrid: React.FC<EnhancedContentGridProps> = ({
     }
   };
 
-  const getGridClasses = () => {
+  const getGridClasses = useCallback(() => {
     switch (viewMode) {
       case 'list':
         return 'flex flex-col space-y-4';
@@ -103,8 +162,21 @@ export const EnhancedContentGrid: React.FC<EnhancedContentGridProps> = ({
       default:
         return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-6';
     }
-  };
+  }, [viewMode]);
 
+  // Loading state
+  if (isLoading && content.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-blue-600" />
+          <p className="text-muted-foreground">Loading your content...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Empty state
   if (content.length === 0) {
     return (
       <motion.div 
@@ -140,7 +212,7 @@ export const EnhancedContentGrid: React.FC<EnhancedContentGridProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Enhanced Controls - Removed search, kept only filters and view modes */}
+      {/* Enhanced Controls */}
       <motion.div 
         className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-xl rounded-2xl p-4 border border-white/20 dark:border-slate-700/30 shadow-lg"
         initial={{ opacity: 0, y: -20 }}
@@ -153,7 +225,7 @@ export const EnhancedContentGrid: React.FC<EnhancedContentGridProps> = ({
             <div className="flex gap-2 flex-wrap">
               <select
                 value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
+                onChange={(e) => handleFilterChange(e.target.value)}
                 className="px-3 py-2 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border border-white/30 dark:border-slate-600/30 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
               >
                 <option value="all">All Types</option>
@@ -166,7 +238,7 @@ export const EnhancedContentGrid: React.FC<EnhancedContentGridProps> = ({
               
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortOption)}
+                onChange={(e) => handleSortChange(e.target.value as SortOption)}
                 className="px-3 py-2 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border border-white/30 dark:border-slate-600/30 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
               >
                 <option value="date">Sort by Date</option>
@@ -188,7 +260,7 @@ export const EnhancedContentGrid: React.FC<EnhancedContentGridProps> = ({
                 key={mode}
                 variant={viewMode === mode ? 'default' : 'ghost'}
                 size="sm"
-                onClick={() => setViewMode(mode)}
+                onClick={() => handleViewModeChange(mode)}
                 className="h-8 w-8 p-0"
               >
                 <Icon className="h-4 w-4" />
@@ -197,7 +269,7 @@ export const EnhancedContentGrid: React.FC<EnhancedContentGridProps> = ({
           </div>
         </div>
 
-        {/* Active Filters - Removed search term related filters */}
+        {/* Active Filters */}
         {(filterType !== 'all' || sortBy !== 'date') && (
           <motion.div 
             className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-white/20 dark:border-slate-700/30"
@@ -218,10 +290,7 @@ export const EnhancedContentGrid: React.FC<EnhancedContentGridProps> = ({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => {
-                setFilterType('all');
-                setSortBy('date');
-              }}
+              onClick={handleClearFilters}
               className="h-6 px-2 text-xs"
             >
               Clear all
@@ -244,7 +313,7 @@ export const EnhancedContentGrid: React.FC<EnhancedContentGridProps> = ({
           animate="visible"
         >
           <AnimatePresence mode="popLayout">
-            {processedContent.map((item, index) => (
+            {processedContent.map((item) => (
               <motion.div
                 key={item.id}
                 layout
@@ -256,35 +325,22 @@ export const EnhancedContentGrid: React.FC<EnhancedContentGridProps> = ({
                   y: -5,
                   transition: { duration: 0.2 }
                 }}
-                className={`${viewMode === 'masonry' ? 'break-inside-avoid mb-4' : ''} group relative`}
+                className={`${viewMode === 'masonry' ? 'break-inside-avoid mb-4' : ''}`}
               >
-                <div className="relative">
-                  <EnhancedContentCard 
-                    content={item} 
-                    onContentClick={onContentClick}
-                  />
-                  
-                  {/* Action Buttons Overlay */}
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-md rounded-lg p-1 shadow-lg border border-white/30">
-                      <ContentActionButtons
-                        content={item}
-                        onEdit={onEditContent || (() => {})}
-                        onDelete={onDeleteContent || (() => {})}
-                        onView={onContentClick || (() => {})}
-                        compact
-                      />
-                    </div>
-                  </div>
-                </div>
+                <MemoizedContentCard
+                  item={item}
+                  onContentClick={onContentClick}
+                  onEditContent={onEditContent}
+                  onDeleteContent={onDeleteContent}
+                />
               </motion.div>
             ))}
           </AnimatePresence>
         </motion.div>
       </LayoutGroup>
 
-      {/* Load More Button (if needed) */}
-      {processedContent.length > 0 && processedContent.length < content.length && (
+      {/* Load More Button */}
+      {hasMore && (
         <motion.div 
           className="text-center pt-8"
           initial={{ opacity: 0 }}
@@ -292,11 +348,20 @@ export const EnhancedContentGrid: React.FC<EnhancedContentGridProps> = ({
           transition={{ delay: 0.5 }}
         >
           <Button 
+            onClick={onLoadMore}
+            disabled={isLoading}
             variant="outline" 
             size="lg"
             className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border-white/30 dark:border-slate-700/30 hover:bg-white dark:hover:bg-slate-800"
           >
-            Load More Content
+            {isLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Loading...
+              </>
+            ) : (
+              'Load More Content'
+            )}
           </Button>
         </motion.div>
       )}

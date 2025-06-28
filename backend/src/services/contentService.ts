@@ -21,6 +21,23 @@ export interface ContentResponse {
     errors?: any;
 }
 
+// Cache for frequently accessed data
+const contentCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+const getCachedData = (key: string) => {
+    const cached = contentCache.get(key);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        return cached.data;
+    }
+    contentCache.delete(key);
+    return null;
+};
+
+const setCachedData = (key: string, data: any) => {
+    contentCache.set(key, { data, timestamp: Date.now() });
+};
+
 export class ContentService {
     static async createContent(contentData: ContentData): Promise<ContentResponse> {
         try {
@@ -34,20 +51,65 @@ export class ContentService {
                 };
             }
 
-            const uniqueId = uuidv4();
+            // Enhanced validation
+            if (!title.trim() || title.length > 500) {
+                return {
+                    success: false,
+                    message: "Title must be between 1 and 500 characters"
+                };
+            }
 
-            // Create content in database
-            const newContent = await ContentModel.create({
-                title,
-                link,
-                type,
-                tags,
-                content,
-                createdAt: getDate(),
-                userId: new Types.ObjectId(userId)
+            if (!link.trim() || link.length > 2000) {
+                return {
+                    success: false,
+                    message: "Link must be between 1 and 2000 characters"
+                };
+            }
+
+            // Check for duplicate content
+            const existingContent = await ContentModel.findOne({
+                userId: new Types.ObjectId(userId),
+                link: link.trim()
             });
 
-            // Insert into vector database (non-blocking)
+            if (existingContent) {
+                return {
+                    success: false,
+                    message: "Content with this link already exists"
+                };
+            }
+
+            const uniqueId = uuidv4();
+
+            // Create content in database with transaction
+            const session = await ContentModel.startSession();
+            let newContent;
+
+            try {
+                await session.withTransaction(async () => {
+                    newContent = await ContentModel.create([{
+                        title: title.trim(),
+                        link: link.trim(),
+                        type,
+                        tags: tags.map(tag => tag.toLowerCase().trim()).filter(tag => tag.length > 0),
+                        content: content?.trim(),
+                        createdAt: getDate(),
+                        userId: new Types.ObjectId(userId)
+                    }], { session });
+                });
+            } finally {
+                await session.endSession();
+            }
+
+            if (!newContent || !newContent[0]) {
+                throw new Error("Failed to create content");
+            }
+
+            // Clear user's content cache
+            contentCache.delete(`user_content_${userId}`);
+            contentCache.delete(`user_stats_${userId}`);
+
+            // Insert into vector database (non-blocking with better error handling)
             VectorService.insertToVectorDB({
                 _id: uniqueId,
                 content: title,
@@ -55,22 +117,22 @@ export class ContentService {
                 type,
                 description: content,
                 userId,
-                contentId: newContent._id as Types.ObjectId
+                contentId: newContent[0]._id as Types.ObjectId
             }).catch(error => {
                 console.error("Vector DB insertion failed:", error);
-                // Don't fail the request if vector insertion fails
+                // Log to monitoring service in production
             });
 
             return {
                 success: true,
                 message: "Content created successfully",
                 data: {
-                    id: newContent._id,
-                    title: newContent.title,
-                    link: newContent.link,
-                    type: newContent.type,
-                    tags: newContent.tags,
-                    createdAt: newContent.createdAt
+                    id: newContent[0]._id,
+                    title: newContent[0].title,
+                    link: newContent[0].link,
+                    type: newContent[0].type,
+                    tags: newContent[0].tags,
+                    createdAt: newContent[0].createdAt
                 }
             };
         } catch (error: any) {
@@ -92,7 +154,7 @@ export class ContentService {
         }
     }
 
-    static async getUserContent(userId: string): Promise<ContentResponse> {
+    static async getUserContent(userId: string, page: number = 1, limit: number = 20): Promise<ContentResponse> {
         try {
             if (!Types.ObjectId.isValid(userId)) {
                 return {
@@ -101,15 +163,64 @@ export class ContentService {
                 };
             }
 
-            const contents = await ContentModel.find({ userId })
-                .populate("userId", "username")
-                .sort({ updatedAt: -1 })
-                .lean();
+            // Check cache first
+            const cacheKey = `user_content_${userId}_${page}_${limit}`;
+            const cachedData = getCachedData(cacheKey);
+            if (cachedData) {
+                return {
+                    success: true,
+                    message: "Content fetched successfully (cached)",
+                    data: cachedData
+                };
+            }
+
+            const skip = (page - 1) * limit;
+
+            // Use aggregation for better performance
+            const [contents, totalCount] = await Promise.all([
+                ContentModel.aggregate([
+                    { $match: { userId: new Types.ObjectId(userId) } },
+                    { $sort: { updatedAt: -1 } },
+                    { $skip: skip },
+                    { $limit: limit },
+                    {
+                        $lookup: {
+                            from: 'users',
+                            localField: 'userId',
+                            foreignField: '_id',
+                            as: 'user',
+                            pipeline: [{ $project: { username: 1 } }]
+                        }
+                    },
+                    {
+                        $addFields: {
+                            userId: { $arrayElemAt: ['$user', 0] }
+                        }
+                    },
+                    { $unset: 'user' }
+                ]),
+                ContentModel.countDocuments({ userId: new Types.ObjectId(userId) })
+            ]);
+
+            const result = {
+                contents,
+                pagination: {
+                    page,
+                    limit,
+                    total: totalCount,
+                    pages: Math.ceil(totalCount / limit),
+                    hasNext: page < Math.ceil(totalCount / limit),
+                    hasPrev: page > 1
+                }
+            };
+
+            // Cache the result
+            setCachedData(cacheKey, result);
 
             return {
                 success: true,
                 message: "Content fetched successfully",
-                data: contents
+                data: result
             };
         } catch (error) {
             console.error("Get user content error:", error);
@@ -120,7 +231,7 @@ export class ContentService {
         }
     }
 
-    static async getContentByType(userId: string, type: string): Promise<ContentResponse> {
+    static async getContentByType(userId: string, type: string, page: number = 1, limit: number = 20): Promise<ContentResponse> {
         try {
             if (!Types.ObjectId.isValid(userId)) {
                 return {
@@ -129,15 +240,40 @@ export class ContentService {
                 };
             }
 
-            const contents = await ContentModel.find({ userId, type })
-                .populate("userId", "username")
-                .sort({ updatedAt: -1 })
-                .lean();
+            const validTypes = ['youtube', 'tweet', 'link', 'document', 'note'];
+            if (!validTypes.includes(type)) {
+                return {
+                    success: false,
+                    message: "Invalid content type"
+                };
+            }
+
+            const skip = (page - 1) * limit;
+
+            const [contents, totalCount] = await Promise.all([
+                ContentModel.find({ userId: new Types.ObjectId(userId), type })
+                    .populate("userId", "username")
+                    .sort({ updatedAt: -1 })
+                    .skip(skip)
+                    .limit(limit)
+                    .lean(),
+                ContentModel.countDocuments({ userId: new Types.ObjectId(userId), type })
+            ]);
 
             return {
                 success: true,
                 message: `${type} content fetched successfully`,
-                data: contents
+                data: {
+                    contents,
+                    pagination: {
+                        page,
+                        limit,
+                        total: totalCount,
+                        pages: Math.ceil(totalCount / limit),
+                        hasNext: page < Math.ceil(totalCount / limit),
+                        hasPrev: page > 1
+                    }
+                }
             };
         } catch (error) {
             console.error("Get content by type error:", error);
@@ -160,11 +296,20 @@ export class ContentService {
 
             const objectId = new Types.ObjectId(contentId);
 
-            // Delete from database
-            const deletedContent = await ContentModel.findOneAndDelete({
-                _id: objectId,
-                userId
-            });
+            // Use transaction for consistency
+            const session = await ContentModel.startSession();
+            let deletedContent;
+
+            try {
+                await session.withTransaction(async () => {
+                    deletedContent = await ContentModel.findOneAndDelete({
+                        _id: objectId,
+                        userId: new Types.ObjectId(userId)
+                    }, { session });
+                });
+            } finally {
+                await session.endSession();
+            }
 
             if (!deletedContent) {
                 return {
@@ -173,10 +318,13 @@ export class ContentService {
                 };
             }
 
+            // Clear caches
+            contentCache.delete(`user_content_${userId}`);
+            contentCache.delete(`user_stats_${userId}`);
+
             // Delete from vector database (non-blocking)
             VectorService.deleteFromVectorDB(objectId).catch(error => {
                 console.error("Vector DB deletion failed:", error);
-                // Don't fail the request if vector deletion fails
             });
 
             return {
@@ -201,9 +349,11 @@ export class ContentService {
                 };
             }
 
+            const userObjectId = new Types.ObjectId(userId);
+
             if (share) {
                 // Check if link already exists
-                const existingLink = await LinkModel.findOne({ userId });
+                const existingLink = await LinkModel.findOne({ userId: userObjectId });
                 if (existingLink) {
                     return {
                         success: true,
@@ -212,11 +362,11 @@ export class ContentService {
                     };
                 }
 
-                // Create new share link
-                const hash = random(10);
+                // Create new share link with better hash
+                const hash = random(12); // Longer hash for better security
                 await LinkModel.create({ 
                     hash, 
-                    userId: new Types.ObjectId(userId) 
+                    userId: userObjectId 
                 });
 
                 return {
@@ -226,7 +376,7 @@ export class ContentService {
                 };
             } else {
                 // Remove share link
-                await LinkModel.deleteOne({ userId });
+                await LinkModel.deleteOne({ userId: userObjectId });
 
                 return {
                     success: true,
@@ -244,6 +394,24 @@ export class ContentService {
 
     static async getSharedContent(shareLink: string): Promise<ContentResponse> {
         try {
+            if (!shareLink || shareLink.length < 10) {
+                return {
+                    success: false,
+                    message: "Invalid share link"
+                };
+            }
+
+            // Check cache first
+            const cacheKey = `shared_content_${shareLink}`;
+            const cachedData = getCachedData(cacheKey);
+            if (cachedData) {
+                return {
+                    success: true,
+                    message: "Shared content fetched successfully (cached)",
+                    data: cachedData
+                };
+            }
+
             const link = await LinkModel.findOne({ hash: shareLink });
             if (!link) {
                 return {
@@ -255,15 +423,22 @@ export class ContentService {
             const contents = await ContentModel.find({ userId: link.userId })
                 .populate("userId", "username")
                 .sort({ updatedAt: -1 })
+                .limit(100) // Limit shared content for performance
                 .lean();
+
+            const result = {
+                contents,
+                owner: contents[0]?.userId,
+                shareLink
+            };
+
+            // Cache shared content for longer (since it changes less frequently)
+            setCachedData(cacheKey, result);
 
             return {
                 success: true,
                 message: "Shared content fetched successfully",
-                data: {
-                    contents,
-                    owner: contents[0]?.userId
-                }
+                data: result
             };
         } catch (error) {
             console.error("Get shared content error:", error);
@@ -274,7 +449,7 @@ export class ContentService {
         }
     }
 
-    static async searchContent(query: string, userId: string): Promise<ContentResponse> {
+    static async searchContent(query: string, userId: string, page: number = 1, limit: number = 10): Promise<ContentResponse> {
         try {
             if (!Types.ObjectId.isValid(userId)) {
                 return {
@@ -283,20 +458,66 @@ export class ContentService {
                 };
             }
 
-            if (!query.trim()) {
+            if (!query.trim() || query.length > 500) {
                 return {
                     success: false,
-                    message: "Search query cannot be empty"
+                    message: "Search query must be between 1 and 500 characters"
                 };
             }
 
-            const searchResults = await VectorService.searchVectorDB(query, userId);
+            // Try vector search first, fallback to text search
+            try {
+                const searchResults = await VectorService.searchVectorDB(query, userId, page, limit);
+                return {
+                    success: true,
+                    message: "Search completed successfully",
+                    data: searchResults
+                };
+            } catch (vectorError) {
+                console.warn("Vector search failed, falling back to text search:", vectorError);
+                
+                // Fallback to MongoDB text search
+                const skip = (page - 1) * limit;
+                const searchRegex = new RegExp(query.trim(), 'i');
+                
+                const [contents, totalCount] = await Promise.all([
+                    ContentModel.find({
+                        userId: new Types.ObjectId(userId),
+                        $or: [
+                            { title: searchRegex },
+                            { content: searchRegex },
+                            { tags: { $in: [searchRegex] } }
+                        ]
+                    })
+                    .sort({ updatedAt: -1 })
+                    .skip(skip)
+                    .limit(limit)
+                    .lean(),
+                    ContentModel.countDocuments({
+                        userId: new Types.ObjectId(userId),
+                        $or: [
+                            { title: searchRegex },
+                            { content: searchRegex },
+                            { tags: { $in: [searchRegex] } }
+                        ]
+                    })
+                ]);
 
-            return {
-                success: true,
-                message: "Search completed successfully",
-                data: searchResults
-            };
+                return {
+                    success: true,
+                    message: "Search completed successfully (text search)",
+                    data: {
+                        query,
+                        results: contents,
+                        pagination: {
+                            page,
+                            limit,
+                            total: totalCount,
+                            pages: Math.ceil(totalCount / limit)
+                        }
+                    }
+                };
+            }
         } catch (error) {
             console.error("Search content error:", error);
             return {
@@ -315,28 +536,68 @@ export class ContentService {
                 };
             }
 
-            const stats = await ContentModel.aggregate([
-                { $match: { userId: new Types.ObjectId(userId) } },
-                {
-                    $group: {
-                        _id: "$type",
-                        count: { $sum: 1 }
+            // Check cache first
+            const cacheKey = `user_stats_${userId}`;
+            const cachedData = getCachedData(cacheKey);
+            if (cachedData) {
+                return {
+                    success: true,
+                    message: "Statistics fetched successfully (cached)",
+                    data: cachedData
+                };
+            }
+
+            const userObjectId = new Types.ObjectId(userId);
+
+            // Enhanced statistics with aggregation
+            const [stats, recentActivity] = await Promise.all([
+                ContentModel.aggregate([
+                    { $match: { userId: userObjectId } },
+                    {
+                        $group: {
+                            _id: "$type",
+                            count: { $sum: 1 },
+                            avgTagsPerContent: { $avg: { $size: "$tags" } },
+                            latestCreated: { $max: "$createdAt" }
+                        }
                     }
-                }
+                ]),
+                ContentModel.find({ userId: userObjectId })
+                    .sort({ createdAt: -1 })
+                    .limit(5)
+                    .select('title type createdAt')
+                    .lean()
             ]);
 
-            const totalContent = await ContentModel.countDocuments({ userId });
+            const totalContent = await ContentModel.countDocuments({ userId: userObjectId });
+            const totalTags = await ContentModel.aggregate([
+                { $match: { userId: userObjectId } },
+                { $unwind: "$tags" },
+                { $group: { _id: "$tags" } },
+                { $count: "uniqueTags" }
+            ]);
+
+            const result = {
+                total: totalContent,
+                byType: stats.reduce((acc, item) => {
+                    acc[item._id] = {
+                        count: item.count,
+                        avgTags: Math.round(item.avgTagsPerContent * 10) / 10,
+                        latest: item.latestCreated
+                    };
+                    return acc;
+                }, {} as Record<string, any>),
+                uniqueTags: totalTags[0]?.uniqueTags || 0,
+                recentActivity
+            };
+
+            // Cache the result
+            setCachedData(cacheKey, result);
 
             return {
                 success: true,
                 message: "Statistics fetched successfully",
-                data: {
-                    total: totalContent,
-                    byType: stats.reduce((acc, item) => {
-                        acc[item._id] = item.count;
-                        return acc;
-                    }, {} as Record<string, number>)
-                }
+                data: result
             };
         } catch (error) {
             console.error("Get content stats error:", error);
