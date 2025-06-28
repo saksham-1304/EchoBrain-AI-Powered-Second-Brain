@@ -73,60 +73,33 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use("/api/v1", router);
 
-// Serve static files from frontend dist folder (only in production or when frontend is built)
-const frontendDistPath = path.join(__dirname, 'frontend');
-if (process.env.NODE_ENV === 'production') {
-    app.use(express.static(frontendDistPath));
+// Serve static files from frontend dist folder
+const frontendDistPath = path.join(__dirname, '../dist');
+app.use(express.static(frontendDistPath));
 
-    // Serve React app for all non-API routes (SPA fallback)
-    app.get('*', (req: express.Request, res: express.Response) => {
-        // Don't serve React app for API routes or health endpoint
-        if (req.path.startsWith('/api/') || req.path === '/health') {
-            res.status(404).json({
-                success: false,
-                message: `Route ${req.originalUrl} not found`,
-                availableRoutes: [
-                    'GET /health',
-                    'POST /api/v1/auth/signup',
-                    'POST /api/v1/auth/signin',
-                    'GET /api/v1/auth/profile',
-                    'POST /api/v1/content',
-                    'GET /api/v1/content/home',
-                    'POST /api/v1/content/search'
-                ]
-            });
-            return;
-        }
-        
-        // Serve React app
-        res.sendFile(path.join(frontendDistPath, 'index.html'));
-    });
-} else {
-    // In development, just return 404 for non-API routes
-    app.get('*', (req: express.Request, res: express.Response) => {
-        if (req.path.startsWith('/api/') || req.path === '/health') {
-            res.status(404).json({
-                success: false,
-                message: `Route ${req.originalUrl} not found`,
-                availableRoutes: [
-                    'GET /health',
-                    'POST /api/v1/auth/signup',
-                    'POST /api/v1/auth/signin',
-                    'GET /api/v1/auth/profile',
-                    'POST /api/v1/content',
-                    'GET /api/v1/content/home',
-                    'POST /api/v1/content/search'
-                ]
-            });
-            return;
-        }
-        
+// Serve React app for all non-API routes (SPA fallback)
+app.get('*', (req: express.Request, res: express.Response) => {
+    // Don't serve React app for API routes or health endpoint
+    if (req.path.startsWith('/api/') || req.path === '/health') {
         res.status(404).json({
             success: false,
-            message: 'Frontend not available in development mode. Please run the frontend separately.'
+            message: `Route ${req.originalUrl} not found`,
+            availableRoutes: [
+                'GET /health',
+                'POST /api/v1/auth/signup',
+                'POST /api/v1/auth/signin',
+                'GET /api/v1/auth/profile',
+                'POST /api/v1/content',
+                'GET /api/v1/content/home',
+                'POST /api/v1/content/search'
+            ]
         });
-    });
-}
+        return;
+    }
+    
+    // Serve React app
+    res.sendFile(path.join(frontendDistPath, 'index.html'));
+});
 
 // Global error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -177,7 +150,7 @@ app.listen(PORT, () => {
     console.log(`🔗 API URL: http://localhost:${PORT}/api/v1`);
     console.log(`❤️  Health Check: http://localhost:${PORT}/health`);
     if (process.env.NODE_ENV === 'development') {
-        console.log(`🌐 Frontend: Run separately on http://localhost:5173`);
+        console.log(`🌐 Frontend: http://localhost:5173`);
     }
 });
 
