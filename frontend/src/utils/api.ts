@@ -1,10 +1,11 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3004/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
 // Types
 export interface User {
   id: string;
   email: string;
   username: string;
+  name: string;
 }
 
 export interface AuthResponse {
@@ -43,6 +44,7 @@ class ApiClient {
   constructor(baseURL: string) {
     this.baseURL = baseURL;
   }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -153,11 +155,22 @@ class ApiClient {
     });
   }
 
-  async deleteContent(contentIds: string[]): Promise<ApiResponse> {
+  async deleteContent(contentId: string): Promise<ApiResponse> {
     return this.request<ApiResponse>('/content', {
       method: 'DELETE',
-      body: JSON.stringify({ contentIds }),
+      body: JSON.stringify({ contentId }),
     });
+  }
+
+  async shareContent(share: boolean): Promise<ApiResponse> {
+    return this.request<ApiResponse>('/content/share', {
+      method: 'POST',
+      body: JSON.stringify({ share }),
+    });
+  }
+
+  async getSharedContent(shareLink: string): Promise<ApiResponse> {
+    return this.request<ApiResponse>(`/content/shared/${shareLink}`);
   }
 
   // Utility methods

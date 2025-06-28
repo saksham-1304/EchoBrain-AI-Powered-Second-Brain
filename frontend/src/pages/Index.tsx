@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Header } from '@/components/Header';
@@ -12,9 +11,9 @@ import { AppSidebar } from '@/components/AppSidebar';
 import { ContentItem } from '@/types/content';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/hooks/useNotifications';
-import { useContentCrud } from '@/hooks/useContentCrud';
+import { useContentManagement } from '@/hooks/useContentManagement';
 import { Button } from '@/components/ui/button';
-import { Plus } from 'lucide-react';
+import { Plus, Loader2 } from 'lucide-react';
 import {
   SidebarProvider,
   SidebarInset,
@@ -33,25 +32,29 @@ const Index = () => {
 
   const {
     content,
-    saveContent,
+    isLoading,
+    loadUserContent,
+    createContent,
     deleteContent,
-    setContent
-  } = useContentCrud([]);
+    shareContent
+  } = useContentManagement();
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!user) {
       navigate('/');
+      return;
     }
-  }, [user, navigate]);
+    // Load user content when component mounts
+    loadUserContent();
+  }, [user, navigate, loadUserContent]);
 
-  const handleNewContent = (newItem: ContentItem) => {
-    console.log('Adding new content:', newItem);
-    setContent(prev => {
-      const updated = [newItem, ...prev];
-      console.log('Updated content array:', updated);
-      return updated;
-    });
-    showContentAdded(newItem.title);
+  const handleNewContent = async (newItem: ContentItem) => {
+    try {
+      await createContent(newItem);
+      showContentAdded(newItem.title);
+    } catch (error) {
+      console.error('Failed to create content:', error);
+    }
   };
 
   const handleContentClick = (item: ContentItem) => {
@@ -62,21 +65,37 @@ const Index = () => {
     setEditingContent(item);
   };
 
-  const handleDeleteContent = (id: string) => {
-    deleteContent(id);
+  const handleDeleteContent = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this content?')) {
+      await deleteContent(id);
+    }
   };
 
-  const handleSaveContent = (contentItem: ContentItem) => {
-    saveContent(contentItem);
-    setEditingContent(null);
-    setShowCreateModal(false);
+  const handleSaveContent = async (contentItem: ContentItem) => {
+    try {
+      if (editingContent) {
+        // For now, we'll just close the modal since update isn't implemented
+        setEditingContent(null);
+      } else {
+        await createContent(contentItem);
+      }
+      setShowCreateModal(false);
+    } catch (error) {
+      console.error('Failed to save content:', error);
+    }
   };
 
-  const handleToggleShare = () => {
+  const handleToggleShare = async () => {
     const newSharedState = !isShared;
-    setIsShared(newSharedState);
-    showBrainShared(newSharedState);
-    console.log('Brain sharing toggled:', newSharedState);
+    try {
+      const result = await shareContent(newSharedState);
+      if (result) {
+        setIsShared(newSharedState);
+        showBrainShared(newSharedState);
+      }
+    } catch (error) {
+      console.error('Failed to toggle sharing:', error);
+    }
   };
 
   const filteredContent = content.filter(item => {
@@ -119,7 +138,14 @@ const Index = () => {
   });
 
   if (!user) {
-    return null; // Will redirect via useEffect
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   const pageVariants = {
@@ -138,9 +164,6 @@ const Index = () => {
     initial: { opacity: 0, y: 20 },
     animate: { opacity: 1, y: 0 }
   };
-
-  console.log('Current content length:', content.length);
-  console.log('Filtered content length:', filteredContent.length);
 
   return (
     <SidebarProvider>
@@ -173,6 +196,7 @@ const Index = () => {
                 onClick={() => setShowCreateModal(true)}
                 className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-xs sm:text-sm px-2 sm:px-4"
                 size="sm"
+                disabled={isLoading}
               >
                 <Plus className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                 <span className="hidden sm:inline">Create Content</span>
@@ -189,7 +213,14 @@ const Index = () => {
                 />
               </motion.div>
               
-              {content.length === 0 ? (
+              {isLoading && content.length === 0 ? (
+                <div className="flex items-center justify-center py-20">
+                  <div className="text-center">
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-blue-600" />
+                    <p className="text-muted-foreground">Loading your content...</p>
+                  </div>
+                </div>
+              ) : content.length === 0 ? (
                 <motion.div 
                   className="animate-scale-in"
                   variants={sectionVariants}

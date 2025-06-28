@@ -136,7 +136,8 @@ export class AuthController {
                 data: {
                     id: userId,
                     username,
-                    email
+                    email,
+                    name: username // Add name field for frontend compatibility
                 }
             });
         } catch (error) {

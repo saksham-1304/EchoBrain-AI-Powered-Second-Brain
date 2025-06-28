@@ -14,16 +14,40 @@ const app = express();
 // Connect to database
 connectDB();
 
-// Middleware
-app.use(cors({
-    origin: process.env.NODE_ENV === 'production'
-        ? [process.env.FRONTEND_URL, `http://localhost:${process.env.PORT || 3004}`].filter(Boolean)
-        : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', `http://localhost:${process.env.PORT || 3004}`],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// Enhanced CORS configuration
+const corsOptions = {
+  origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = process.env.NODE_ENV === 'production'
+      ? [process.env.FRONTEND_URL, `http://localhost:${process.env.PORT || 3004}`].filter(Boolean)
+      : [
+          'http://localhost:3000', 
+          'http://localhost:3001', 
+          'http://localhost:5173', 
+          'http://localhost:4173',
+          `http://localhost:${process.env.PORT || 3004}`,
+          'http://127.0.0.1:5173',
+          'http://127.0.0.1:3000'
+        ];
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
+};
 
+app.use(cors(corsOptions));
+
+// Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -41,7 +65,8 @@ app.get('/health', (req, res) => {
         success: true,
         message: 'Server is healthy',
         timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV || 'development'
+        environment: process.env.NODE_ENV || 'development',
+        version: '1.0.0'
     });
 });
 
@@ -49,7 +74,7 @@ app.get('/health', (req, res) => {
 app.use("/api/v1", router);
 
 // Serve static files from frontend dist folder
-const frontendDistPath = path.join(__dirname, '../dist','frontend','dist');
+const frontendDistPath = path.join(__dirname, '../dist');
 app.use(express.static(frontendDistPath));
 
 // Serve React app for all non-API routes (SPA fallback)
@@ -86,6 +111,16 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
         timestamp: new Date().toISOString()
     });
 
+    // Handle CORS errors
+    if (err.message === 'Not allowed by CORS') {
+        res.status(403).json({
+            success: false,
+            message: 'CORS policy violation',
+            origin: req.headers.origin
+        });
+        return;
+    }
+
     res.status(err.status || 500).json({
         success: false,
         message: process.env.NODE_ENV === 'production'
@@ -114,6 +149,9 @@ app.listen(PORT, () => {
     console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`🔗 API URL: http://localhost:${PORT}/api/v1`);
     console.log(`❤️  Health Check: http://localhost:${PORT}/health`);
+    if (process.env.NODE_ENV === 'development') {
+        console.log(`🌐 Frontend: http://localhost:5173`);
+    }
 });
 
 export default app;

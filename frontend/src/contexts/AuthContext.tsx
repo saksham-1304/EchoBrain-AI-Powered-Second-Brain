@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api, User } from '@/utils/api';
 import { useToast } from '@/hooks/use-toast';
