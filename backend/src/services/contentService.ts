@@ -83,7 +83,7 @@ export class ContentService {
 
             // Create content in database with transaction
             const session = await ContentModel.startSession();
-            let newContent;
+            let newContent: any;
 
             try {
                 await session.withTransaction(async () => {

@@ -227,7 +227,7 @@ export class VectorService {
                         ...result.payload,
                         // Sanitize payload for security
                         parsedContent: result.payload?.parsedContent ? 
-                            JSON.parse(result.payload.parsedContent) : {}
+                            JSON.parse(result.payload.parsedContent as string) : {}
                     }
                 }));
 
